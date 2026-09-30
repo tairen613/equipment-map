@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>設備マップ CSV対応版</title>
+  <style>
+    :root{--blue:#1565c0;--dark:#0d3f7a;--light:#e8f2ff;--red:#e53935;--redlight:#ffe8e7;--bg:#edf2f7;--text:#172033;--muted:#64748b;--line:#d7e0ea}
+    *{box-sizing:border-box}body{margin:0;font-family:"Yu Gothic UI","Meiryo",sans-serif;color:var(--text);background:var(--bg)}button,input{font:inherit}button{cursor:pointer}
+    header{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fffffff2;border-bottom:1px solid var(--line)}
+    .brand{min-width:180px}.brand h1{margin:0;font-size:22px}.brand p{margin:3px 0 0;color:var(--muted);font-size:12px}
+    .csv-controls{display:flex;align-items:center;gap:8px}.csv-button{display:inline-block;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:700}.csv-status{max-width:250px;color:var(--muted);font-size:12px}
+    .label-toggle{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px}.search-wrap{position:relative;z-index:150;width:min(430px,100%);margin-left:auto}.search-wrap input{width:100%;padding:12px 42px 12px 16px;border:2px solid var(--line);border-radius:14px;outline:none;background:#f8fafc}.clear-search{position:absolute;right:8px;top:50%;width:30px;height:30px;transform:translateY(-50%);border:0;border-radius:50%;background:transparent;color:var(--muted)}
+    .search-suggestions{display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:160;max-height:320px;overflow-y:auto;padding:6px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 14px 32px #0f172a26}.search-suggestions.open{display:block}.suggestion-button{display:flex;width:100%;justify-content:space-between;gap:12px;padding:11px 12px;border:0;border-radius:10px;background:#fff;text-align:left}.suggestion-button:hover,.suggestion-button.active{background:var(--light)}.suggestion-name{font-weight:700}.suggestion-meta{color:var(--muted);font-size:12px}.suggestion-empty{padding:12px;color:var(--muted);text-align:center}
+    main{width:min(1320px,calc(100% - 28px));margin:24px auto 50px}.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}.back-button{padding:9px 14px;border:1px solid var(--line);background:#fff;font-weight:700}.breadcrumb{color:var(--muted);font-size:14px}.search-message{display:none;margin-bottom:14px;padding:12px 16px;border:1px solid #ffb8b5;color:#9f1714;background:var(--redlight);font-weight:700}.card{overflow:hidden;background:#fff;border-radius:16px;box-shadow:0 12px 35px #0f172a1a}.card-head{padding:20px 24px 14px}.card-head h2{margin:0}.card-head p{margin:6px 0 0;color:var(--muted)}.card-body{padding:18px 24px 24px}.view{display:none}.view.active{display:block}
+    .map-canvas{position:relative;width:100%;aspect-ratio:2267/1367;overflow:hidden;border:2px solid #cbd5e1;background:#f8fafc}.map-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}.building{position:absolute;z-index:2;display:grid;place-items:center;padding:5px;border:2px solid var(--dark);border-radius:0;color:#fff;background:#1565c0d1;text-align:center}.building.no-floor{background:#475569db}.building-name{display:block;font-weight:900}.building-floor{display:block;margin-top:3px;font-size:11px}.building.search-hit{background:var(--red)}.building.search-dim{opacity:.25}
+    .floor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:12px}.floor-button{min-height:90px;padding:14px;border:2px solid var(--line);border-radius:10px;background:#fff;text-align:left}.floor-button strong{display:block;font-size:24px}.floor-button small{color:var(--muted)}.floor-button.roof{background:#eef9f3}.floor-button.basement{background:#f4f0ff}.floor-button.search-hit{color:#fff;background:var(--red)}.floor-button.search-hit small{color:#fff}.floor-button.search-dim{opacity:.35}
+    .floor-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}.floor-map{position:relative;min-height:430px;aspect-ratio:16/10;overflow:hidden;border:2px solid #cbd5e1;background:#f8fafc;background-size:contain;background-position:center;background-repeat:no-repeat}.placeholder-label{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:7px 12px;border-radius:999px;background:#fff;color:var(--muted)}
+    .equipment-marker{position:absolute;z-index:5;width:1px;height:1px;padding:0;transform:translate(-50%,-50%);border:0;background:transparent}.marker-symbol{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border:2px solid #00000073;box-shadow:0 3px 8px #0f172a47}.marker-name{position:absolute;text-align:center;line-height:1.1;white-space:nowrap;pointer-events:none}.inside-label{left:50%;top:50%;transform:translate(-50%,-50%);overflow:hidden;text-overflow:ellipsis;color:#fff;text-shadow:1px 1px 2px #000,-1px -1px 2px #000,1px -1px 2px #000,-1px 1px 2px #000}.outside-label{left:50%;transform:translateX(-50%);color:#fff;background:transparent;z-index:30;text-shadow:1px 1px 2px #000,-1px -1px 2px #000,1px -1px 2px #000,-1px 1px 2px #000}.label-row-1{top:calc(100% - 30px)}.label-row-2{top:calc(100% - 20px)}.label-row-3{top:calc(100% - 10px)}
+    .shape-circle{border-radius:50%}.shape-square{border-radius:0}.shape-diamond{transform:translate(-50%,-50%) rotate(45deg)}.shape-triangle{border:0;clip-path:polygon(50% 0,0 100%,100% 100%)}.shape-hexagon{border:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}.shape-star{border:0;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}.shape-rectangle{border-radius:0}.equipment-marker.search-hit .marker-symbol{outline:5px solid #e539357a}.equipment-marker.search-dim{opacity:.18}
+    .equipment-list{padding:16px;border:1px solid var(--line)}.equipment-list button{display:flex;width:100%;align-items:center;gap:10px;margin-bottom:8px;padding:11px;border:1px solid var(--line);background:#fff;text-align:left}.equipment-list button.search-hit{border-color:var(--red);background:var(--redlight)}.list-symbol{display:inline-block;width:22px;height:22px;flex:0 0 22px;border:1px solid #0006}.list-symbol.shape-diamond{transform:rotate(45deg) scale(.75)}.equipment-legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:12px;padding:12px;border:1px solid var(--line);background:#f8fafc}.legend-item{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+    .modal-backdrop{display:none;position:fixed;inset:0;z-index:200;padding:18px;background:#0f172a8f}.modal-backdrop.open{display:grid;place-items:center}.modal{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:16px}.modal-top{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}.close-modal{width:38px;height:38px;border:0;border-radius:50%;font-size:23px}.equipment-photo{display:block;width:100%;aspect-ratio:16/7;object-fit:contain;background:#e8edf3}.photo-placeholder{display:grid;place-items:center;width:100%;aspect-ratio:16/7;background:#e8edf3;color:var(--muted)}.modal-content{padding:22px}.spec-table{width:100%;border-collapse:collapse}.spec-table th,.spec-table td{padding:11px 9px;border-bottom:1px solid var(--line);text-align:left}.guide{margin-top:18px;padding:16px;border-left:5px solid #16865b;background:#edf9f4;font-size:13px}code{padding:2px 5px;background:#e7edf4}
+    @media(max-width:900px){header{align-items:stretch;flex-direction:column}.search-wrap{margin:0;width:100%}.csv-controls{flex-wrap:wrap}.floor-layout{grid-template-columns:1fr}.building-floor{display:none}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><h1>設備マップ</h1><p>CSVで設備を管理</p></div>
+    <div class="csv-controls">
+      <label class="csv-button" for="csvInput">CSVを読み込む</label>
+      <input id="csvInput" type="file" accept=".csv,text/csv" hidden>
+      <span id="csvStatus" class="csv-status">CSV未読込</span>
+      <label class="label-toggle"><input id="showAllLabels" type="checkbox" checked>全設備名を表示</label>
+    </div>
+    <div class="search-wrap"><input id="searchInput" type="search" placeholder="設備名を検索" autocomplete="off"><button id="clearSearch" class="clear-search">×</button><div id="searchSuggestions" class="search-suggestions"></div></div>
+  </header>
+
+  <main>
+    <div id="searchMessage" class="search-message"></div>
+    <div class="toolbar"><button id="backButton" class="back-button" style="display:none">← 戻る</button><div id="breadcrumb" class="breadcrumb">全体マップ</div></div>
+    <section id="overviewView" class="view active card"><div class="card-head"><h2>全体マップ</h2><p>最初にCSVを読み込むと設備件数が反映されます。</p></div><div class="card-body"><div id="overviewMap" class="map-canvas"><img src="maps/map1.png" class="map-image" alt="全体マップ"></div></div></section>
+    <section id="floorsView" class="view card"><div class="card-head"><h2 id="floorTitle"></h2><p>表示する階を選択してください。</p></div><div class="card-body"><div id="floorGrid" class="floor-grid"></div></div></section>
+    <section id="floorMapView" class="view card"><div class="card-head"><h2 id="floorMapTitle"></h2><div id="equipmentLegend" class="equipment-legend"></div></div><div class="card-body floor-layout"><div id="floorMap" class="floor-map"></div><aside class="equipment-list"><h3>このマップの設備</h3><div id="equipmentList"></div></aside></div></section>
+    <div class="guide"><strong>使い方：</strong>Excelで <code>equipment.csv</code> を編集し、Excelの「CSV UTF-8」形式で保存してから「CSVを読み込む」を押します。位置調整中は「全設備名を表示」をオンにしてください。</div>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop"><article class="modal"><div class="modal-top"><strong>設備詳細</strong><button id="closeModal" class="close-modal">×</button></div><div id="photoArea"></div><div class="modal-content"><h2 id="detailName"></h2><div id="detailLocation"></div><p id="detailDescription"></p><table class="spec-table"><tbody id="detailSpecs"></tbody></table></div></article></div>
+
+<script>
+"use strict";
+
+const BUILDINGS=[
+{id:"new-1-t",name:"新1号T",type:"building",floorList:["RF","9F","8F","7F","5F","4F","3F","2F","1F","B1F","B2F"],x:70.5,y:46.5,width:17,height:15},
+{id:"new-2-t",name:"新2号T",type:"building",floorList:["RF","9F","8F","7F","5F","4F","3F","2F","1F","B1F","B2F"],x:52,y:46.5,width:18.5,height:15},
+{id:"unit-1-b",name:"1号B",type:"building",floorList:["RF","15F","14F","13F","12F","11F","10F","9F","8F","7F","6F","5F","4F","3F","2F","1F"],x:70.5,y:26.5,width:15,height:20},
+{id:"unit-2-b",name:"2号B",type:"building",floorList:["RF","17F","16F","15F","14F","13F","12F","11F","10F","9F","8F","7F","6F","5F","4F","3F","2F","1F"],x:52,y:26.5,width:18.5,height:20},
+{id:"coal-silo",name:"石炭サイロ",type:"area",x:8,y:10,width:15,height:14},{id:"light-oil-tank",name:"軽油タンク",type:"area",x:8,y:30,width:15,height:12},{id:"ammonia-storage",name:"アンモニア貯蔵",type:"area",x:8,y:48,width:15,height:12},{id:"idf",name:"IDF",type:"area",x:30,y:28,width:10,height:12},{id:"ep",name:"電気集塵装置",type:"area",x:30,y:44,width:14,height:15}
+];
+
+const EQUIPMENT_TYPE_STYLE={pump:{label:"ポンプ",shape:"square",color:"#00BCD4"},fan:{label:"ファン",shape:"diamond",color:"#4CAF50"},valve:{label:"弁",shape:"triangle",color:"#F44336"},panel:{label:"配電盤・制御盤",shape:"square",color:"#2196F3"},motor:{label:"電動機",shape:"square",color:"#3F51B5"},tank:{label:"タンク・槽",shape:"circle",color:"#FF9800"},silo:{label:"サイロ",shape:"circle",color:"#795548"},conveyor:{label:"コンベヤ",shape:"rectangle",color:"#607D8B"},exchanger:{label:"熱交換器",shape:"square",color:"#9C27B0"},turbine:{label:"タービン",shape:"star",color:"#673AB7"},boiler:{label:"ボイラ",shape:"star",color:"#FF5722"},other:{label:"その他",shape:"square",color:"#6B7280"}};
+
+const MAP_IMAGES={"new-1-t-1F":"maps/1T_1F.jpg","new-2-t-1F":"maps/2T_1F.jpg","unit-1-b-1F":"maps/1B_1F.jpg"};
+let EQUIPMENT=[];
+let currentView="overview",selectedBuildingId=null,selectedFloor=null,activeSuggestionIndex=-1;
+const searchInput=document.getElementById("searchInput"),suggestions=document.getElementById("searchSuggestions"),searchMessage=document.getElementById("searchMessage"),backButton=document.getElementById("backButton"),breadcrumb=document.getElementById("breadcrumb"),showAllLabels=document.getElementById("showAllLabels"),csvStatus=document.getElementById("csvStatus");
+
+function parseCSV(text){
+  const rows=[];let row=[],cell="",quoted=false;
+  text=text.replace(/^\uFEFF/,"");
+  for(let i=0;i<text.length;i++){
+    const c=text[i],next=text[i+1];
+    if(c==='"'&&quoted&&next==='"'){cell+='"';i++;}
+    else if(c==='"'){quoted=!quoted;}
+    else if(c===","&&!quoted){row.push(cell);cell="";}
+    else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&next==="\n")i++;row.push(cell);if(row.some(v=>v!==""))rows.push(row);row=[];cell="";}
+    else{cell+=c;}
+  }
+  row.push(cell);if(row.some(v=>v!==""))rows.push(row);
+  if(rows.length<2)return [];
+  const headers=rows[0].map(h=>h.trim());
+  return rows.slice(1).map(values=>Object.fromEntries(headers.map((h,i)=>[h,(values[i]??"").trim()])));
+}
+
+function toNumber(value,fallback){const n=Number(value);return value!==""&&Number.isFinite(n)?n:fallback;}
+function toBoolean(value){return ["true","1","yes","on","表示","する"].includes(String(value).trim().toLowerCase());}
+function parseSpecs(value){if(!value)return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[];}catch{return value.split("|").map(pair=>pair.split(":")).filter(a=>a.length>=2);}}
+function normalizeRow(row){
+  return {id:row.id,name:row.name,type:row.type||"other",category:row.category||"",buildingId:row.buildingId,floor:row.floor||"",x:toNumber(row.x,50),y:toNumber(row.y,50),size:toNumber(row.size,null),width:toNumber(row.width,null),height:toNumber(row.height,null),description:row.description||"",image:row.image||"",specs:parseSpecs(row.specs),showLabel:toBoolean(row.showLabel)};
+}
+
+async function loadCSVFile(file){
+  try{
+    const text=await file.text();
+    const rows=parseCSV(text).map(normalizeRow).filter(item=>item.id&&item.name&&item.buildingId);
+    if(!rows.length)throw new Error("有効な設備行がありません");
+    EQUIPMENT=rows;csvStatus.textContent=file.name+"："+rows.length+"件読込";renderCurrentView();
+  }catch(error){csvStatus.textContent="読込失敗："+error.message;console.error(error);}
+}
+
+document.getElementById("csvInput").addEventListener("change",event=>{const file=event.target.files[0];if(file)loadCSVFile(file);});
+showAllLabels.addEventListener("change",()=>{if(currentView==="floorMap")renderFloorMap();});
+
+const norm=value=>String(value||"").trim().toLocaleLowerCase("ja-JP");
+function getEquipmentStyle(item){return EQUIPMENT_TYPE_STYLE[item.type]||EQUIPMENT_TYPE_STYLE.other;}
+function getMatches(){const keyword=norm(searchInput.value);if(!keyword)return[];return EQUIPMENT.filter(item=>norm([item.name,item.category,item.description,item.floor,item.type].join(" ")).includes(keyword));}
+function getSuggestionItems(){const keyword=norm(searchInput.value),used=new Set();if(!keyword)return[];return EQUIPMENT.filter(item=>{const name=norm(item.name);if(!name.startsWith(keyword)||used.has(name))return false;used.add(name);return true;}).slice(0,10);}
+function closeSuggestions(){suggestions.classList.remove("open");suggestions.innerHTML="";activeSuggestionIndex=-1;}
+function chooseSuggestion(item){searchInput.value=item.name;closeSuggestions();searchInput.dispatchEvent(new Event("input"));searchInput.focus();}
+function renderSuggestions(){const keyword=searchInput.value.trim();if(!keyword){closeSuggestions();return;}const items=getSuggestionItems();suggestions.innerHTML="";activeSuggestionIndex=-1;if(!items.length){suggestions.innerHTML='<div class="suggestion-empty">候補はありません</div>';suggestions.classList.add("open");return;}items.forEach(item=>{const building=BUILDINGS.find(v=>v.id===item.buildingId),button=document.createElement("button");button.className="suggestion-button";button.innerHTML='<span class="suggestion-name">'+item.name+'</span><span class="suggestion-meta">'+(building?building.name:"")+'・'+item.floor+'</span>';button.addEventListener("mousedown",event=>{event.preventDefault();chooseSuggestion(item);});suggestions.appendChild(button);});suggestions.classList.add("open");}
+function moveSuggestion(direction){const buttons=[...suggestions.querySelectorAll(".suggestion-button")];if(!buttons.length)return;activeSuggestionIndex=(activeSuggestionIndex+direction+buttons.length)%buttons.length;buttons.forEach((button,index)=>button.classList.toggle("active",index===activeSuggestionIndex));}
+function showView(viewName){currentView=viewName;document.querySelectorAll(".view").forEach(view=>view.classList.remove("active"));document.getElementById(viewName==="overview"?"overviewView":viewName==="floors"?"floorsView":"floorMapView").classList.add("active");backButton.style.display=viewName==="overview"?"none":"inline-block";updateBreadcrumb();updateSearchMessage();}
+function updateBreadcrumb(){const building=BUILDINGS.find(item=>item.id===selectedBuildingId);breadcrumb.textContent="全体マップ"+(building?" › "+building.name:"")+(selectedFloor?" › "+selectedFloor:"");}
+function updateSearchMessage(){const keyword=searchInput.value.trim();if(!keyword){searchMessage.style.display="none";return;}searchMessage.textContent="「"+keyword+"」の検索結果："+getMatches().length+"件";searchMessage.style.display="block";}
+function renderCurrentView(){if(currentView==="overview")renderOverview();if(currentView==="floors")renderFloors();if(currentView==="floorMap")renderFloorMap();updateSearchMessage();}
+
+function renderOverview(){const map=document.getElementById("overviewMap");map.querySelectorAll(".building").forEach(e=>e.remove());const hits=new Set(getMatches().map(item=>item.buildingId)),searching=!!searchInput.value.trim();BUILDINGS.forEach(building=>{const button=document.createElement("button");button.className="building"+(building.type==="area"?" no-floor":"")+(searching?(hits.has(building.id)?" search-hit":" search-dim"):"");Object.assign(button.style,{left:building.x+"%",top:building.y+"%",width:building.width+"%",height:building.height+"%"});const sub=building.type==="area"?"タップして表示":building.floorList[0]+" ～ "+building.floorList.at(-1);button.innerHTML='<span class="building-name">'+building.name+'</span><span class="building-floor">'+sub+'</span>';button.onclick=()=>openBuilding(building.id);map.appendChild(button);});}
+function openBuilding(id){const building=BUILDINGS.find(item=>item.id===id);selectedBuildingId=id;if(building.type==="area"){selectedFloor="";renderFloorMap();showView("floorMap");}else{selectedFloor=null;renderFloors();showView("floors");}}
+function renderFloors(){const building=BUILDINGS.find(item=>item.id===selectedBuildingId),grid=document.getElementById("floorGrid"),hits=new Set(getMatches().filter(item=>item.buildingId===building.id).map(item=>item.floor)),searching=!!searchInput.value.trim();document.getElementById("floorTitle").textContent=building.name+" 階数選択";grid.innerHTML="";building.floorList.forEach(floor=>{const button=document.createElement("button"),count=EQUIPMENT.filter(item=>item.buildingId===building.id&&item.floor===floor).length;button.className="floor-button"+(floor.startsWith("B")?" basement":"")+(floor==="RF"?" roof":"")+(searching?(hits.has(floor)?" search-hit":" search-dim"):"");button.innerHTML="<strong>"+floor+"</strong><small>設備 "+count+"件</small>";button.onclick=()=>{selectedFloor=floor;renderFloorMap();showView("floorMap");};grid.appendChild(button);});}
+function renderEquipmentLegend(items){const legend=document.getElementById("equipmentLegend");legend.innerHTML="";const types=[...new Set(items.map(item=>item.type||"other"))];if(!types.length){legend.style.display="none";return;}legend.style.display="flex";types.forEach(type=>{const style=EQUIPMENT_TYPE_STYLE[type]||EQUIPMENT_TYPE_STYLE.other,item=document.createElement("span"),symbol=document.createElement("span"),label=document.createElement("span");item.className="legend-item";symbol.className="list-symbol shape-"+style.shape;symbol.style.backgroundColor=style.color;label.textContent=style.label;item.append(symbol,label);legend.appendChild(item);});}
+
+function createEquipmentMarker(item,searching,matchingIds){
+  const style=getEquipmentStyle(item),width=Number(item.width)||Number(item.size)||40,height=Number(item.height)||Number(item.size)||40,marker=document.createElement("button");marker.className="equipment-marker";if(searching&&matchingIds.has(item.id))marker.classList.add("search-hit");if(searching&&!matchingIds.has(item.id))marker.classList.add("search-dim");marker.style.left=item.x+"%";marker.style.top=item.y+"%";
+  const symbol=document.createElement("span");symbol.className="marker-symbol shape-"+style.shape;symbol.style.backgroundColor=style.color;symbol.style.width=width+"px";symbol.style.height=height+"px";marker.appendChild(symbol);
+  const name=document.createElement("span");name.className="marker-name";name.style.width=width+"px";
+  if(item.name.length>6){const center=Math.ceil(item.name.length/2);name.innerHTML=item.name.substring(0,center)+"<br>"+item.name.substring(center);}else{name.textContent=item.name;}
+  const area=width*height;if(area>=10000){name.classList.add("inside-label");}else{name.classList.add("outside-label");name.classList.add("label-row-"+((Math.floor(item.x)%3)+1));}
+  name.style.fontSize=item.name.length>7?"7px":item.name.length>3?"10px":"20px";
+  if(showAllLabels.checked||item.showLabel)marker.appendChild(name);
+  marker.addEventListener("click",()=>showEquipmentDetail(item));return marker;
+}
+function createEquipmentListButton(item,searching,matchingIds){const style=getEquipmentStyle(item),button=document.createElement("button"),symbol=document.createElement("span"),text=document.createElement("span");if(searching&&matchingIds.has(item.id))button.classList.add("search-hit");symbol.className="list-symbol shape-"+style.shape;symbol.style.backgroundColor=style.color;text.innerHTML="<strong>"+item.name+"</strong><br><small>"+item.category+"</small>";button.append(symbol,text);button.onclick=()=>showEquipmentDetail(item);return button;}
+function renderFloorMap(){const building=BUILDINGS.find(item=>item.id===selectedBuildingId),map=document.getElementById("floorMap"),list=document.getElementById("equipmentList"),title=building.type==="area"?building.name+" マップ":building.name+" "+selectedFloor+"マップ";document.getElementById("floorMapTitle").textContent=title;map.innerHTML="";list.innerHTML="";const imageKey=building.type==="area"?building.id:building.id+"-"+selectedFloor,image=MAP_IMAGES[imageKey];map.style.backgroundImage=image?'url("'+image+'")':"none";if(!image){const label=document.createElement("div");label.className="placeholder-label";label.textContent="MAP_IMAGESへ画像を登録してください";map.appendChild(label);}const floorValue=building.type==="area"?"":selectedFloor,items=EQUIPMENT.filter(item=>item.buildingId===building.id&&item.floor===floorValue);renderEquipmentLegend(items);const matchingIds=new Set(getMatches().map(item=>item.id)),searching=!!searchInput.value.trim();items.forEach(item=>{map.appendChild(createEquipmentMarker(item,searching,matchingIds));list.appendChild(createEquipmentListButton(item,searching,matchingIds));});if(!items.length)list.innerHTML="<p>CSVに設備がありません。</p>";}
+function showEquipmentDetail(item){const building=BUILDINGS.find(value=>value.id===item.buildingId);document.getElementById("detailName").textContent=item.name;document.getElementById("detailLocation").textContent=building.name+(item.floor?"・"+item.floor:"")+"・"+item.category;document.getElementById("detailDescription").textContent=item.description;document.getElementById("photoArea").innerHTML=item.image?'<img class="equipment-photo" src="'+item.image+'" alt="設備写真">':'<div class="photo-placeholder">ここに外観写真を表示</div>';const specs=document.getElementById("detailSpecs");specs.innerHTML="<tr><th>表示サイズ</th><td>"+(item.width||item.size||40)+" × "+(item.height||item.size||40)+"</td></tr>";item.specs.forEach(spec=>{const row=document.createElement("tr");row.innerHTML="<th>"+spec[0]+"</th><td>"+spec[1]+"</td>";specs.appendChild(row);});document.getElementById("modalBackdrop").classList.add("open");}
+function closeModal(){document.getElementById("modalBackdrop").classList.remove("open");}
+
+searchInput.addEventListener("input",()=>{renderSuggestions();renderCurrentView();});searchInput.addEventListener("focus",renderSuggestions);searchInput.addEventListener("keydown",event=>{if(event.key==="ArrowDown"){event.preventDefault();moveSuggestion(1);}else if(event.key==="ArrowUp"){event.preventDefault();moveSuggestion(-1);}else if(event.key==="Enter"&&activeSuggestionIndex>=0){event.preventDefault();suggestions.querySelectorAll(".suggestion-button")[activeSuggestionIndex].dispatchEvent(new MouseEvent("mousedown",{bubbles:true}));}else if(event.key==="Escape")closeSuggestions();});document.addEventListener("click",event=>{if(!event.target.closest(".search-wrap"))closeSuggestions();});document.getElementById("clearSearch").onclick=()=>{searchInput.value="";closeSuggestions();renderCurrentView();searchInput.focus();};backButton.onclick=()=>{const building=BUILDINGS.find(item=>item.id===selectedBuildingId);if(currentView==="floorMap"&&building.type==="building"){selectedFloor=null;renderFloors();showView("floors");}else{selectedBuildingId=null;selectedFloor=null;renderOverview();showView("overview");}};document.getElementById("closeModal").onclick=closeModal;document.getElementById("modalBackdrop").onclick=event=>{if(event.target.id==="modalBackdrop")closeModal();};document.addEventListener("keydown",event=>{if(event.key==="Escape")closeModal();});renderOverview();
+</script>
+</body>
+</html>

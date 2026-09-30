@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>設備マップ</title>
+
+  <style>
+    /* ============================================================
+       1. 基本デザイン
+       ============================================================ */
+    :root {
+      --blue: #1565c0;
+      --blue-dark: #0d3f7a;
+      --blue-light: #e8f2ff;
+      --red: #e53935;
+      --red-light: #ffe8e7;
+      --background: #edf2f7;
+      --text: #172033;
+      --muted: #64748b;
+      --line: #d7e0ea;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+      color: var(--text);
+      background: var(--background);
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    /* ============================================================
+       2. ヘッダーと検索候補
+       ============================================================ */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 22px;
+      background: rgba(255,255,255,.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand { min-width: 180px; }
+    .brand h1 { margin: 0; font-size: 22px; }
+    .brand p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+
+    .search-wrap {
+      position: relative;
+      z-index: 150;
+      width: min(520px, 100%);
+      margin-left: auto;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      padding: 12px 42px 12px 16px;
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      outline: none;
+      background: #f8fafc;
+    }
+
+    .clear-search {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      width: 30px;
+      height: 30px;
+      transform: translateY(-50%);
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .search-suggestions {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 160;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: white;
+      box-shadow: 0 14px 32px rgba(15,23,42,.15);
+    }
+
+    .search-suggestions.open { display: block; }
+
+    .suggestion-button {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 12px;
+      border: 0;
+      border-radius: 10px;
+      background: white;
+      text-align: left;
+    }
+
+    .suggestion-button:hover, .suggestion-button.active { background: var(--blue-light); }
+    .suggestion-name { font-weight: 700; }
+    .suggestion-meta { color: var(--muted); font-size: 12px; }
+    .suggestion-empty { padding: 12px; color: var(--muted); text-align: center; }
+
+    /* ============================================================
+       3. 共通画面
+       ============================================================ */
+    main { width: min(1320px, calc(100% - 28px)); margin: 24px auto 50px; }
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .back-button { padding: 9px 14px; border: 1px solid var(--line); background: white; font-weight: 700; }
+    .breadcrumb { color: var(--muted); font-size: 14px; }
+    .search-message { display: none; margin-bottom: 14px; padding: 12px 16px; border: 1px solid #ffb8b5; color: #9f1714; background: var(--red-light); font-weight: 700; }
+    .card { overflow: hidden; background: white; border-radius: 16px; box-shadow: 0 12px 35px rgba(15,23,42,.10); }
+    .card-head { padding: 20px 24px 14px; }
+    .card-head h2 { margin: 0; }
+    .card-head p { margin: 6px 0 0; color: var(--muted); }
+    .card-body { padding: 18px 24px 24px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ============================================================
+       4. 全体マップと建物
+       ============================================================ */
+    .map-canvas {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 2267 / 1367;
+      overflow: hidden;
+      border: 2px solid #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .map-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .building {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      padding: 5px;
+      border: 2px solid var(--blue-dark);
+      border-radius: 0;
+      color: white;
+      background: rgba(21,101,192,.82);
+      text-align: center;
+    }
+
+    .building.no-floor { background: rgba(71,85,105,.86); }
+    .building-name { display: block; font-weight: 900; }
+    .building-floor { display: block; margin-top: 3px; font-size: 11px; }
+    .building.search-hit { background: var(--red); }
+    .building.search-dim { opacity: .25; }
+
+    /* ============================================================
+       5. 階選択
+       ============================================================ */
+    .floor-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(105px,1fr)); gap: 12px; }
+    .floor-button { min-height: 90px; padding: 14px; border: 2px solid var(--line); border-radius: 10px; background: white; text-align: left; }
+    .floor-button strong { display: block; font-size: 24px; }
+    .floor-button small { color: var(--muted); }
+    .floor-button.roof { background: #eef9f3; }
+    .floor-button.basement { background: #f4f0ff; }
+    .floor-button.search-hit { color: white; background: var(--red); }
+    .floor-button.search-hit small { color: white; }
+    .floor-button.search-dim { opacity: .35; }
+
+    /* ============================================================
+       6. 階マップと設備記号
+       ============================================================ */
+    .floor-layout { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 18px; }
+
+    .floor-map {
+      position: relative;
+      min-height: 430px;
+      aspect-ratio: 16 / 10;
+      overflow: hidden;
+      border: 2px solid #cbd5e1;
+      background: #f8fafc;
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .placeholder-label {
+      position: absolute;
+      left: 50%;
+      top: 14px;
+      transform: translateX(-50%);
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+    }
+
+    /*
+      設備ごとのsizeは、JavaScriptでmarker-symbolのwidthとheightへ反映します。
+      基準値は38px。設備側のsizeを省略すると38pxになります。
+    */
+    .equipment-marker {
+      position: absolute;
+      z-index: 5;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      transform: translate(-50%, -50%);
+      border: 0;
+      background: transparent;
+    }
+
+    .marker-symbol {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(0,0,0,.45);
+      box-shadow: 0 3px 8px rgba(15,23,42,.28);
+    }
+
+    .marker-name {
+
+  position: absolute;
+
+  text-align: center;
+
+  line-height: 1.1;
+
+  white-space: nowrap;
+
+  pointer-events: none;
+}
+
+/* 大設備 */
+
+.inside-label {
+
+  left: 50%;
+  top: 50%;
+
+  transform: translate(-50%, -50%);
+
+  text-align: center;
+
+  color: white;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  text-shadow:
+      1px 1px 2px black,
+     -1px -1px 2px black,
+      1px -1px 2px black,
+     -1px 1px 2px black;
+}
+
+
+/* 小設備 */
+
+.outside-label {
+
+  left: 50%;
+
+  transform: translateX(-50%);
+
+  color: white;
+
+  background: transparent;
+
+  z-index: 30;
+
+  text-shadow:
+      1px 1px 2px black,
+     -1px -1px 2px black,
+      1px -1px 2px black,
+     -1px 1px 2px black;
+}
+
+/* 重なり防止 */
+
+.label-row-1 {
+  top: calc(100% - 30px);
+}
+
+.label-row-2 {
+  top: calc(100% - 20px);
+}
+
+.label-row-3 {
+  top: calc(100% - 10px);
+}
+
+    .shape-circle { border-radius: 50%; }
+    .shape-square { border-radius: 0; }
+    .shape-diamond { transform: translate(-50%, -50%) rotate(45deg); }
+    .shape-triangle { border: 0; clip-path: polygon(50% 0%,0% 100%,100% 100%); }
+    .shape-hexagon { border: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); }
+    .shape-star { border: 0; clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%); }
+    .shape-rectangle { border-radius: 0; }
+
+    .equipment-marker.search-hit .marker-symbol { outline: 5px solid rgba(229,57,53,.48); }
+    .equipment-marker.search-dim { opacity: .18; }
+
+    .equipment-list { padding: 16px; border: 1px solid var(--line); }
+    .equipment-list button { display: flex; width: 100%; align-items: center; gap: 10px; margin-bottom: 8px; padding: 11px; border: 1px solid var(--line); background: white; text-align: left; }
+    .equipment-list button.search-hit { border-color: var(--red); background: var(--red-light); }
+
+    .list-symbol { display: inline-block; width: 22px; height: 22px; flex: 0 0 22px; border: 1px solid rgba(0,0,0,.4); }
+    .list-symbol.shape-diamond { transform: rotate(45deg) scale(.75); }
+
+    .equipment-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); background: #f8fafc; }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+
+    /* ============================================================
+       7. 設備詳細
+       ============================================================ */
+    .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 200; padding: 18px; background: rgba(15,23,42,.56); }
+    .modal-backdrop.open { display: grid; place-items: center; }
+    .modal { width: min(720px,100%); max-height: 92vh; overflow: auto; background: white; border-radius: 16px; }
+    .modal-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+    .close-modal { width: 38px; height: 38px; border: 0; border-radius: 50%; font-size: 23px; }
+    .equipment-photo { display: block; width: 100%; aspect-ratio: 16 / 7; object-fit: contain; background: #e8edf3; }
+    .photo-placeholder { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 7; background: #e8edf3; color: var(--muted); }
+    .modal-content { padding: 22px; }
+    .spec-table { width: 100%; border-collapse: collapse; }
+    .spec-table th, .spec-table td { padding: 11px 9px; border-bottom: 1px solid var(--line); text-align: left; }
+    .guide { margin-top: 18px; padding: 16px; border-left: 5px solid #16865b; background: #edf9f4; font-size: 13px; }
+    code { padding: 2px 5px; background: #e7edf4; }
+
+    @media (max-width: 760px) {
+      header { align-items: stretch; flex-direction: column; }
+      .search-wrap { margin: 0; }
+      .floor-layout { grid-template-columns: 1fr; }
+      .building-floor { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="brand">
+      <h1>設備マップ</h1>
+      <p>建物・階・設備を検索</p>
+    </div>
+
+    <div class="search-wrap">
+      <input id="searchInput" type="search" placeholder="設備名を検索　例：給水ポンプ" autocomplete="off">
+      <button id="clearSearch" class="clear-search">×</button>
+      <div id="searchSuggestions" class="search-suggestions"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="searchMessage" class="search-message"></div>
+
+    <div class="toolbar">
+      <button id="backButton" class="back-button" style="display: none;">← 戻る</button>
+      <div id="breadcrumb" class="breadcrumb">全体マップ</div>
+    </div>
+
+    <section id="overviewView" class="view active card">
+      <div class="card-head">
+        <h2>全体マップ</h2>
+        <p>建物または設備エリアをタップしてください。</p>
+      </div>
+      <div class="card-body">
+        <div id="overviewMap" class="map-canvas">
+          <img src="maps/map1.png" class="map-image" alt="全体マップ">
+        </div>
+      </div>
+    </section>
+
+    <section id="floorsView" class="view card">
+      <div class="card-head">
+        <h2 id="floorTitle"></h2>
+        <p>表示する階を選択してください。</p>
+      </div>
+      <div class="card-body">
+        <div id="floorGrid" class="floor-grid"></div>
+      </div>
+    </section>
+
+    <section id="floorMapView" class="view card">
+      <div class="card-head">
+        <h2 id="floorMapTitle"></h2>
+        <div id="equipmentLegend" class="equipment-legend"></div>
+      </div>
+      <div class="card-body floor-layout">
+        <div id="floorMap" class="floor-map"></div>
+        <aside class="equipment-list">
+          <h3>このマップの設備</h3>
+          <div id="equipmentList"></div>
+        </aside>
+      </div>
+    </section>
+
+    <div class="guide">
+      <strong>編集場所：</strong>
+      設備の大きさは <code>EQUIPMENT</code> 内の <code>size</code> を変更します。
+      単位はpxで、省略時は38です。
+    </div>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop">
+    <article class="modal">
+      <div class="modal-top">
+        <strong>設備詳細</strong>
+        <button id="closeModal" class="close-modal">×</button>
+      </div>
+      <div id="photoArea"></div>
+      <div class="modal-content">
+        <h2 id="detailName"></h2>
+        <div id="detailLocation"></div>
+        <p id="detailDescription"></p>
+        <table class="spec-table"><tbody id="detailSpecs"></tbody></table>
+      </div>
+    </article>
+  </div>
+
+  <script>
+    "use strict";
+
+    /* ============================================================
+       編集エリア1：建物・設備エリア
+       ============================================================ */
+    const BUILDINGS = [
+      {
+        id: "new-1-t",
+        name: "新1号T",
+        type: "building",
+        floorList: ["RF","9F","8F","7F","5F","4F","3F","2F","1F","B1F","B2F"],
+        x: 70.5, y: 46.5, width: 17, height: 15
+      },
+      {
+        id: "new-2-t",
+        name: "新2号T",
+        type: "building",
+        floorList: ["RF","9F","8F","7F","5F","4F","3F","2F","1F","B1F","B2F"],
+        x: 52, y: 46.5, width: 18.5, height: 15
+      },
+      {
+        id: "unit-1-b",
+        name: "1号B",
+        type: "building",
+        floorList: ["RF","15F","14F","13F","12F","11F","10F","9F","8F","7F","6F","5F","4F","3F","2F","1F"],
+        x: 70.5, y: 26.5, width: 15, height: 20
+      },
+      {
+        id: "unit-2-b",
+        name: "2号B",
+        type: "building",
+        floorList: ["RF","17F","16F","15F","14F","13F","12F","11F","10F","9F","8F","7F","6F","5F","4F","3F","2F","1F"],
+        x: 52, y: 26.5, width: 18.5, height: 20
+      },
+      { id: "coal-silo", name: "石炭サイロ", type: "area", x: 8, y: 10, width: 15, height: 14 },
+      { id: "light-oil-tank", name: "軽油タンク", type: "area", x: 8, y: 30, width: 15, height: 12 },
+      { id: "ammonia-storage", name: "アンモニア貯蔵", type: "area", x: 8, y: 48, width: 15, height: 12 },
+      { id: "idf", name: "IDF", type: "area", x: 30, y: 28, width: 10, height: 12 },
+      { id: "ep", name: "電気集塵装置", type: "area", x: 30, y: 44, width: 14, height: 15 }
+    ];
+
+    /* ============================================================
+       編集エリア2：設備種類ごとの色と形
+       ============================================================ */
+    const EQUIPMENT_TYPE_STYLE = {
+      pump:      { label: "ポンプ", shape: "square", color: "#00BCD4" },
+      fan:       { label: "ファン", shape: "diamond", color: "#4CAF50" },
+      valve:     { label: "弁", shape: "triangle", color: "#F44336" },
+      panel:     { label: "配電盤・制御盤", shape: "square", color: "#2196F3" },
+      motor:     { label: "電動機", shape: "square", color: "#3F51B5" },
+      tank:      { label: "タンク・槽", shape: "circle", color: "#FF9800" },
+      silo:      { label: "サイロ", shape: "circle", color: "#795548" },
+      conveyor:  { label: "コンベヤ", shape: "rectangle", color: "#607D8B" },
+      exchanger: { label: "熱交換器", shape: "square", color: "#9C27B0" },
+      turbine:   { label: "タービン", shape: "star", color: "#673AB7" },
+      boiler:    { label: "ボイラ", shape: "star", color: "#FF5722" },
+      other:     { label: "その他", shape: "square", color: "#6B7280" }
+    };
+
+    /* ============================================================
+       編集エリア3：マップ画像
+       1号T 1階図は maps/new-1-t-1f.png として置く例です。
+       ============================================================ */
+    const MAP_IMAGES = {
+      "new-1-t-1F": "maps/1T_1F.jpg",
+      "new-2-t-1F": "maps/2T_1F.jpg",
+
+      "unit-1-b-1F": "maps/1B_1F.jpg"
+    };
+
+    /* ============================================================
+       編集エリア4：設備データ
+
+       size:
+         設備記号の大きさをpxで指定します。
+         例：弁25、制御盤32、ポンプ40、クーラ58、タンク55、復水器100
+       ============================================================ */
+/* 名前を表示する設備 */
+
+const SHOW_LABELS = [
+
+  "1t-condenser",
+  "1t-m-bfp",
+  "1t-t-bfp",
+  "1t-t-bfbp",
+  "1t-demineralizer",
+
+  "2t-condenser",
+  "2t-m-bfp",
+  "2t-t-bfbp",
+  "2t-demineralizer"
+
+];
+
+    const EQUIPMENT = [
+      {
+        id: "1t-fgd-cooling-water-cooler",
+        name: "脱硫用冷却水クーラ",
+        type: "exchanger",
+        category: "熱交換器",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 19,
+        y: 90,
+        size: 30,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-bearing-cooling-water-cooler",
+        name: "軸受冷却水クーラ",
+        type: "exchanger",
+        category: "熱交換器",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 28,
+        y: 90,
+        size: 58,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condensate-vacuum-pump",
+        name: "復水真空ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 40,
+        y: 90,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condenser-waterbox-priming-pump",
+        name: "復水器水室プライミングポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 60,
+        y: 88,
+        size: 28,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-seawater-booster-pump",
+        name: "海水ブースタポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 70,
+        y: 88,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-main-turbine-oil-cleaner",
+        name: "主タービン油洗浄機",
+        type: "other",
+        category: "油処理設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 85,
+        y: 80,
+        size: 30,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-oil-transfer-pump",
+        name: "油移送ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 85,
+        y: 88,
+        size: 30,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-oil-metering-tank",
+        name: "油計量タンク",
+        type: "tank",
+        category: "タンク",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 92,
+        y: 88,
+        size: 50,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-bearing-cooling-water-pump",
+        name: "軸受冷却水ポンプABC",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 13,
+        y: 70,
+        size: 30,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-high-salt-drain-pump",
+        name: "高塩系排水ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 3,
+        y: 53,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-sulfuric-acid-dilution-tank",
+        name: "硫酸希釈槽",
+        type: "tank",
+        category: "薬品槽",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 7,
+        y: 56,
+        size: 17,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-caustic-soda-metering-tank",
+        name: "苛性ソーダ計量槽",
+        type: "tank",
+        category: "薬品槽",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 10,
+        y: 57,
+        size: 13,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-anion-regeneration-vessel",
+        name: "アニオン再生塔",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 13,
+        y: 54,
+        size: 13,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-cation-regeneration-vessel",
+        name: "カチオン再生塔",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 16,
+        y: 54,
+        size: 15,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-resin-storage",
+        name: "樹脂貯蔵",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 19,
+        y: 55,
+        size: 15,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-hydrogen-seal-oil-panel",
+        name: "水素密封油制御盤",
+        type: "panel",
+        category: "制御盤",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 23,
+        y: 57,
+        size: 13,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-seal-oil-unit",
+        name: "密封油装置",
+        type: "other",
+        category: "油設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 30,
+        y: 53,
+        width: 70,
+        height: 34,
+
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-demineralizer",
+        name: "脱塩塔ABCD",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 11,
+        y: 41,
+        width: 120,
+        height: 25,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-demineralizer-circulation-pump",
+        name: "脱塩塔循環ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 23,
+        y: 40,
+        size: 14,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condemi-panel",
+        name: "コンデミ制御盤",
+        type: "panel",
+        category: "制御盤",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 14,
+        y: 33,
+        width: 36,
+        height: 15,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condenser",
+        name: "復水器",
+        type: "exchanger",
+        category: "復水設備",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 51.5,
+        y: 52,
+        width: 75,
+        height: 125,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condenser-ball-cleaning-panel",
+        name: "復水器ボール洗浄装置制御盤",
+        type: "panel",
+        category: "制御盤",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 65,
+        y: 70,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condenser-inlet-filter-panel",
+        name: "復水器入り口フィルター制御盤",
+        type: "panel",
+        category: "制御盤",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 68,
+        y: 70,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-gland-steam-condenser",
+        name: "グランド蒸気復水器",
+        type: "exchanger",
+        category: "熱交換器",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 63.5,
+        y: 34.5,
+        width: 22,
+        height: 12,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condensate-booster-pump",
+        name: "復水ブースタポンプAB",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 28,
+        y: 19,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-t-bfp",
+        name: "T-BFP",
+        type: "pump",
+        category: "給水ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 54,
+        y: 19,
+        width: 80,
+        height: 45,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-t-bfbp",
+        name: "T-BFBP",
+        type: "pump",
+        category: "ブースタポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 70,
+        y: 20,
+        width: 40,
+        height: 25,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-deaerator-recirculation-pump",
+        name: "脱気器再循環ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 60,
+        y: 12,
+        width: 50,
+        height: 25,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-m-bfp",
+        name: "M-BFP",
+        type: "pump",
+        category: "給水ポンプ",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 84,
+        y: 19,
+        width: 80,
+        height: 30,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-sulfuric-acid-storage",
+        name: "硫酸貯蔵",
+        type: "tank",
+        category: "薬品タンク",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 97,
+        y: 17,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-caustic-soda-storage",
+        name: "苛性ソーダ貯蔵",
+        type: "tank",
+        category: "薬品タンク",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 97,
+        y: 24,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condemi-regeneration-air-storage",
+        name: "コンデミ再生用空気貯蔵",
+        type: "tank",
+        category: "空気槽",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 4,
+        y: 20,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "1t-condemi-control-air-storage",
+        name: "コンデミ制御用空気貯蔵",
+        type: "tank",
+        category: "空気槽",
+        buildingId: "new-1-t",
+        floor: "1F",
+        x: 8,
+        y: 18,
+        size: 20,
+        description: "",
+        image: "",
+        specs: []
+      },
+
+      {
+        id: "2t-sulfuric-acid-cooling-water-cooler",
+        name: "硫酸用冷却水クーラ",
+        type: "exchanger",
+        category: "熱交換器",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 10,
+        y: 14,
+        size: 58,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-bearing-cooling-water-cooler",
+        name: "軸受冷却水クーラ",
+        type: "exchanger",
+        category: "熱交換器",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 23,
+        y: 14,
+        size: 58,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condenser-vacuum-pump",
+        name: "復水器真空ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 36,
+        y: 14,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condenser-waterbox-priming-pump",
+        name: "復水器水室プライミングポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 49,
+        y: 14,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-seawater-booster-pump",
+        name: "海水ブースタポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 62,
+        y: 14,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-main-turbine-oil-cleaner",
+        name: "主タービン油洗浄機",
+        type: "other",
+        category: "油設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 75,
+        y: 14,
+        size: 38,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-main-oil-tank",
+        name: "主油タンク",
+        type: "tank",
+        category: "タンク",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 88,
+        y: 14,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-control-oil-tank",
+        name: "制御油タンク",
+        type: "tank",
+        category: "タンク",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 10,
+        y: 31,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-bearing-cooling-water-pump",
+        name: "軸受冷却水ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 23,
+        y: 31,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-high-salt-drain-pump",
+        name: "高塩系排水ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 36,
+        y: 31,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-sulfuric-acid-dilution-tank",
+        name: "硫酸希釈槽",
+        type: "tank",
+        category: "薬品槽",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 49,
+        y: 31,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-caustic-soda-metering-tank",
+        name: "苛性ソーダ計量槽",
+        type: "tank",
+        category: "薬品槽",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 62,
+        y: 31,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-anion-regeneration-vessel",
+        name: "アニオン再生塔",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 75,
+        y: 31,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-cation-regeneration-vessel",
+        name: "カチオン再生塔",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 88,
+        y: 31,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-resin-storage",
+        name: "樹脂貯蔵",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 10,
+        y: 48,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-hydrogen-gas-dryer",
+        name: "水素ガス乾燥機",
+        type: "other",
+        category: "水素設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 23,
+        y: 48,
+        size: 38,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-seal-oil-unit",
+        name: "密封油装置",
+        type: "other",
+        category: "油設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 36,
+        y: 48,
+        size: 38,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-demineralizer",
+        name: "脱塩塔",
+        type: "tank",
+        category: "水処理設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 49,
+        y: 48,
+        size: 65,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-demineralizer-circulation-pump",
+        name: "脱塩塔循環ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 62,
+        y: 48,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condemi-panel",
+        name: "コンデミ制御盤",
+        type: "panel",
+        category: "制御盤",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 75,
+        y: 48,
+        size: 32,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condenser",
+        name: "復水器",
+        type: "exchanger",
+        category: "復水設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 88,
+        y: 48,
+        size: 100,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-t-bfbp",
+        name: "T-BFBP",
+        type: "pump",
+        category: "ブースタポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 10,
+        y: 65,
+        size: 62,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-bfp-t-main-oil-tank",
+        name: "BFP-T主油タンク",
+        type: "tank",
+        category: "タンク",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 23,
+        y: 65,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-deaerator-recirculation-pump",
+        name: "脱気器再循環ポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 36,
+        y: 65,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-m-bfp",
+        name: "M-BFP",
+        type: "pump",
+        category: "給水ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 49,
+        y: 65,
+        size: 78,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-sulfuric-acid-storage",
+        name: "硫酸貯蔵",
+        type: "tank",
+        category: "薬品タンク",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 62,
+        y: 65,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-caustic-soda-storage",
+        name: "苛性ソーダ貯蔵",
+        type: "tank",
+        category: "薬品タンク",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 75,
+        y: 65,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condemi-regeneration-air-storage",
+        name: "コンデミ再生用空気貯蔵",
+        type: "tank",
+        category: "空気槽",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 88,
+        y: 65,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condemi-control-air-storage",
+        name: "コンデミ制御用空気貯蔵",
+        type: "tank",
+        category: "空気槽",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 10,
+        y: 82,
+        size: 55,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-stator-cooling-water-unit",
+        name: "固定子冷却水装置",
+        type: "other",
+        category: "発電機設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 23,
+        y: 82,
+        size: 38,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condensate-salt-monitor",
+        name: "復水検塩装置",
+        type: "panel",
+        category: "分析設備",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 36,
+        y: 82,
+        size: 32,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-condensate-booster-pump",
+        name: "復水ブースタポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 49,
+        y: 82,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      },
+      {
+        id: "2t-low-pressure-drain-pump",
+        name: "低圧ドレンポンプ",
+        type: "pump",
+        category: "ポンプ",
+        buildingId: "new-2-t",
+        floor: "1F",
+        x: 62,
+        y: 82,
+        size: 40,
+        description: "",
+        image: "",
+        specs: []
+      }
+    ];
+
+    /* ============================================================
+       以下はシステム内部処理です。通常は編集不要です。
+       ============================================================ */
+    let currentView = "overview";
+    let selectedBuildingId = null;
+    let selectedFloor = null;
+    let activeSuggestionIndex = -1;
+
+    const searchInput = document.getElementById("searchInput");
+    const suggestions = document.getElementById("searchSuggestions");
+    const searchMessage = document.getElementById("searchMessage");
+    const backButton = document.getElementById("backButton");
+    const breadcrumb = document.getElementById("breadcrumb");
+
+    function normalize(value) {
+      return String(value || "").trim().toLocaleLowerCase("ja-JP");
+    }
+
+    function getEquipmentStyle(item) {
+      return EQUIPMENT_TYPE_STYLE[item.type] || EQUIPMENT_TYPE_STYLE.other;
+    }
+
+    function getMatches() {
+      const keyword = normalize(searchInput.value);
+      if (!keyword) return [];
+
+      return EQUIPMENT.filter(function(item) {
+        return normalize([
+          item.name,
+          item.category,
+          item.description,
+          item.floor,
+          item.type
+        ].join(" ")).includes(keyword);
+      });
+    }
+
+    function getSuggestionItems() {
+      const keyword = normalize(searchInput.value);
+      const usedNames = new Set();
+      if (!keyword) return [];
+
+      return EQUIPMENT.filter(function(item) {
+        const equipmentName = normalize(item.name);
+        if (!equipmentName.startsWith(keyword)) return false;
+        if (usedNames.has(equipmentName)) return false;
+        usedNames.add(equipmentName);
+        return true;
+      }).slice(0, 10);
+    }
+
+    function closeSuggestions() {
+      suggestions.classList.remove("open");
+      suggestions.innerHTML = "";
+      activeSuggestionIndex = -1;
+    }
+
+    function chooseSuggestion(item) {
+      searchInput.value = item.name;
+      closeSuggestions();
+      searchInput.dispatchEvent(new Event("input"));
+      searchInput.focus();
+    }
+
+    function renderSuggestions() {
+      const keyword = searchInput.value.trim();
+      if (!keyword) {
+        closeSuggestions();
+        return;
+      }
+
+      const items = getSuggestionItems();
+      suggestions.innerHTML = "";
+      activeSuggestionIndex = -1;
+
+      if (items.length === 0) {
+        suggestions.innerHTML = '<div class="suggestion-empty">候補はありません</div>';
+        suggestions.classList.add("open");
+        return;
+      }
+
+      items.forEach(function(item) {
+        const building = BUILDINGS.find(function(value) {
+          return value.id === item.buildingId;
+        });
+
+        const button = document.createElement("button");
+        button.className = "suggestion-button";
+        button.innerHTML =
+          '<span class="suggestion-name">' + item.name + '</span>' +
+          '<span class="suggestion-meta">' + building.name + '・' + item.floor + '</span>';
+
+        button.addEventListener("mousedown", function(event) {
+          event.preventDefault();
+          chooseSuggestion(item);
+        });
+
+        suggestions.appendChild(button);
+      });
+
+      suggestions.classList.add("open");
+    }
+
+    function moveSuggestion(direction) {
+      const buttons = Array.from(suggestions.querySelectorAll(".suggestion-button"));
+      if (buttons.length === 0) return;
+
+      activeSuggestionIndex =
+        (activeSuggestionIndex + direction + buttons.length) % buttons.length;
+
+      buttons.forEach(function(button, index) {
+        button.classList.toggle("active", index === activeSuggestionIndex);
+      });
+    }
+
+    function showView(viewName) {
+      currentView = viewName;
+      document.querySelectorAll(".view").forEach(function(view) {
+        view.classList.remove("active");
+      });
+
+      const viewId = viewName === "overview"
+        ? "overviewView"
+        : viewName === "floors"
+          ? "floorsView"
+          : "floorMapView";
+
+      document.getElementById(viewId).classList.add("active");
+      backButton.style.display = viewName === "overview" ? "none" : "inline-block";
+      updateBreadcrumb();
+      updateSearchMessage();
+    }
+
+    function updateBreadcrumb() {
+      const building = BUILDINGS.find(function(item) {
+        return item.id === selectedBuildingId;
+      });
+
+      let text = "全体マップ";
+      if (building) text += " › " + building.name;
+      if (selectedFloor) text += " › " + selectedFloor;
+      breadcrumb.textContent = text;
+    }
+
+    function updateSearchMessage() {
+      const keyword = searchInput.value.trim();
+      if (!keyword) {
+        searchMessage.style.display = "none";
+        return;
+      }
+
+      searchMessage.textContent =
+        "「" + keyword + "」の検索結果：" + getMatches().length + "件";
+      searchMessage.style.display = "block";
+    }
+
+    function renderOverview() {
+      const map = document.getElementById("overviewMap");
+      map.querySelectorAll(".building").forEach(function(element) {
+        element.remove();
+      });
+
+      const matchingBuildingIds = new Set(
+        getMatches().map(function(item) { return item.buildingId; })
+      );
+      const searching = searchInput.value.trim() !== "";
+
+      BUILDINGS.forEach(function(building) {
+        const button = document.createElement("button");
+        button.className = "building";
+        if (building.type === "area") button.classList.add("no-floor");
+        if (searching && matchingBuildingIds.has(building.id)) button.classList.add("search-hit");
+        if (searching && !matchingBuildingIds.has(building.id)) button.classList.add("search-dim");
+
+        button.style.left = building.x + "%";
+        button.style.top = building.y + "%";
+        button.style.width = building.width + "%";
+        button.style.height = building.height + "%";
+
+        const subText = building.type === "area"
+          ? "タップして表示"
+          : building.floorList[0] + " ～ " + building.floorList.at(-1);
+
+        button.innerHTML =
+          '<span class="building-name">' + building.name + '</span>' +
+          '<span class="building-floor">' + subText + '</span>';
+
+        button.addEventListener("click", function() {
+          openBuilding(building.id);
+        });
+
+        map.appendChild(button);
+      });
+    }
+
+    function openBuilding(buildingId) {
+      const building = BUILDINGS.find(function(item) {
+        return item.id === buildingId;
+      });
+
+      selectedBuildingId = buildingId;
+
+      if (building.type === "area") {
+        selectedFloor = "";
+        renderFloorMap();
+        showView("floorMap");
+        return;
+      }
+
+      selectedFloor = null;
+      renderFloors();
+      showView("floors");
+    }
+
+    function renderFloors() {
+      const building = BUILDINGS.find(function(item) {
+        return item.id === selectedBuildingId;
+      });
+      const grid = document.getElementById("floorGrid");
+      document.getElementById("floorTitle").textContent = building.name + " 階数選択";
+      grid.innerHTML = "";
+
+      const matchingFloors = new Set(
+        getMatches()
+          .filter(function(item) { return item.buildingId === building.id; })
+          .map(function(item) { return item.floor; })
+      );
+      const searching = searchInput.value.trim() !== "";
+
+      building.floorList.forEach(function(floor) {
+        const button = document.createElement("button");
+        const count = EQUIPMENT.filter(function(item) {
+          return item.buildingId === building.id && item.floor === floor;
+        }).length;
+
+        button.className = "floor-button";
+        if (floor.startsWith("B")) button.classList.add("basement");
+        if (floor === "RF") button.classList.add("roof");
+        if (searching && matchingFloors.has(floor)) button.classList.add("search-hit");
+        if (searching && !matchingFloors.has(floor)) button.classList.add("search-dim");
+
+        button.innerHTML =
+          "<strong>" + floor + "</strong>" +
+          "<small>設備 " + count + "件</small>";
+
+        button.addEventListener("click", function() {
+          selectedFloor = floor;
+          renderFloorMap();
+          showView("floorMap");
+        });
+
+        grid.appendChild(button);
+      });
+    }
+
+    function renderEquipmentLegend(items) {
+      const legend = document.getElementById("equipmentLegend");
+      legend.innerHTML = "";
+
+      const typeNames = Array.from(new Set(
+        items.map(function(item) { return item.type || "other"; })
+      ));
+
+      if (typeNames.length === 0) {
+        legend.style.display = "none";
+        return;
+      }
+
+      legend.style.display = "flex";
+
+      typeNames.forEach(function(typeName) {
+        const style = EQUIPMENT_TYPE_STYLE[typeName] || EQUIPMENT_TYPE_STYLE.other;
+        const item = document.createElement("span");
+        item.className = "legend-item";
+
+        const symbol = document.createElement("span");
+        symbol.className = "list-symbol shape-" + style.shape;
+        symbol.style.backgroundColor = style.color;
+
+        const label = document.createElement("span");
+        label.textContent = style.label;
+
+        item.appendChild(symbol);
+        item.appendChild(label);
+        legend.appendChild(item);
+      });
+    }
+
+    /*
+      ★sizeを反映する中心部分です。
+      item.sizeがあればその値、省略時は38を使います。
+      長方形は横を1.35倍、縦を0.72倍にします。
+    */
+    function createEquipmentMarker(item, searching, matchingEquipmentIds) {
+
+  const style =
+    getEquipmentStyle(item);
+
+  const width =
+    Number(item.width) ||
+    Number(item.size) ||
+    40;
+
+  const height =
+    Number(item.height) ||
+    Number(item.size) ||
+    40;
+
+  const marker =
+    document.createElement("button");
+
+  marker.className =
+    "equipment-marker";
+
+  if (
+    searching &&
+    matchingEquipmentIds.has(item.id)
+  ) {
+    marker.classList.add("search-hit");
+  }
+
+  if (
+    searching &&
+    !matchingEquipmentIds.has(item.id)
+  ) {
+    marker.classList.add("search-dim");
+  }
+
+  marker.style.left =
+    item.x + "%";
+
+  marker.style.top =
+    item.y + "%";
+
+  const symbol =
+    document.createElement("span");
+
+  symbol.className =
+    "marker-symbol shape-" +
+    style.shape;
+
+  symbol.style.backgroundColor =
+    style.color;
+
+  symbol.style.width =
+    width + "px";
+
+  symbol.style.height =
+    height + "px";
+
+  const name =
+    document.createElement("span");
+
+  name.className =
+    "marker-name";
+
+ name.style.width =
+  width + "px";
+
+//設備文字が長い場合２行にする
+  if (item.name.length > 6) {
+
+    const center =
+      Math.ceil(item.name.length / 2);
+
+    name.innerHTML =
+      item.name.substring(0, center) +
+      "<br>" +
+      item.name.substring(center);
+
+}
+else {
+
+    name.textContent =
+      item.name;
+
+}
+
+const area =
+  width * height;
+
+// 大設備は図形内表示
+if (area >= 10000) {
+
+    name.classList.add(
+      "inside-label"
+    );
+
+}
+// 小設備は図形下表示
+else {
+
+    name.classList.add(
+      "outside-label"
+    );
+
+    // ラベル位置を3段に分散
+    const row =
+      (Math.floor(item.x) % 3) + 1;
+
+    name.classList.add(
+      "label-row-" + row
+    );
+}
+
+// フォントサイズ自動調整
+if (item.name.length > 7) {
+
+    name.style.fontSize = "7px";
+
+}
+else if (item.name.length > 3) {
+
+    name.style.fontSize = "10px";
+
+}
+else {
+
+    name.style.fontSize = "20px";
+
+}
+
+
+//設備調整後消去
+marker.appendChild(symbol);
+
+marker.appendChild(name);
+
+marker.addEventListener(
+  "click",
+  function () {
+    showEquipmentDetail(item);
+  }
+);
+
+return marker;
+}
+
+
+
+
+
+
+
+/*設備の調整後にとコメントを消去
+
+marker.appendChild(symbol);
+
+if (
+  SHOW_LABELS.includes(item.id)
+) {
+  marker.appendChild(name);
+}
+marker.addEventListener(
+  "click",
+  function () {
+    showEquipmentDetail(item);
+  }
+);
+
+return marker;
+}
+*/
+
+    function createEquipmentListButton(item, searching, matchingEquipmentIds) {
+      const style = getEquipmentStyle(item);
+      const button = document.createElement("button");
+      if (searching && matchingEquipmentIds.has(item.id)) button.classList.add("search-hit");
+
+      const symbol = document.createElement("span");
+      symbol.className = "list-symbol shape-" + style.shape;
+      symbol.style.backgroundColor = style.color;
+
+      const text = document.createElement("span");
+      text.innerHTML =
+        "<strong>" + item.name + "</strong><br>" +
+        "<small>" +item.category +"</small>";
+
+      button.appendChild(symbol);
+      button.appendChild(text);
+      button.addEventListener("click", function() {
+        showEquipmentDetail(item);
+      });
+
+      return button;
+    }
+
+    function renderFloorMap() {
+      const building = BUILDINGS.find(function(item) {
+        return item.id === selectedBuildingId;
+      });
+      const map = document.getElementById("floorMap");
+      const list = document.getElementById("equipmentList");
+
+      const title = building.type === "area"
+        ? building.name + " マップ"
+        : building.name + " " + selectedFloor + "マップ";
+      document.getElementById("floorMapTitle").textContent = title;
+
+      map.innerHTML = "";
+      list.innerHTML = "";
+
+      const imageKey = building.type === "area"
+        ? building.id
+        : building.id + "-" + selectedFloor;
+      const image = MAP_IMAGES[imageKey];
+      map.style.backgroundImage = image ? 'url("' + image + '")' : "none";
+
+      if (!image) {
+        const label = document.createElement("div");
+        label.className = "placeholder-label";
+        label.textContent = "仮マップ：MAP_IMAGESへ画像を登録してください";
+        map.appendChild(label);
+      }
+
+      const floorValue = building.type === "area" ? "" : selectedFloor;
+      const equipmentItems = EQUIPMENT.filter(function(item) {
+        return item.buildingId === building.id && item.floor === floorValue;
+      });
+
+      renderEquipmentLegend(equipmentItems);
+
+      const matchingEquipmentIds = new Set(
+        getMatches().map(function(item) { return item.id; })
+      );
+      const searching = searchInput.value.trim() !== "";
+
+      equipmentItems.forEach(function(item) {
+        map.appendChild(createEquipmentMarker(item, searching, matchingEquipmentIds));
+        list.appendChild(createEquipmentListButton(item, searching, matchingEquipmentIds));
+      });
+
+      if (equipmentItems.length === 0) {
+        list.innerHTML = "<p>設備は未登録です。</p>";
+      }
+    }
+
+    function showEquipmentDetail(item) {
+      const building = BUILDINGS.find(function(value) {
+        return value.id === item.buildingId;
+      });
+
+      document.getElementById("detailName").textContent = item.name;
+      document.getElementById("detailLocation").textContent = item.floor
+        ? building.name + "・" + item.floor + "・" + item.category
+        : building.name + "・" + item.category;
+      document.getElementById("detailDescription").textContent = item.description;
+      document.getElementById("photoArea").innerHTML = item.image
+        ? '<img class="equipment-photo" src="' + item.image + '" alt="設備写真">'
+        : '<div class="photo-placeholder">ここに外観写真を表示</div>';
+
+      const specs = document.getElementById("detailSpecs");
+      specs.innerHTML = "";
+
+      const sizeRow =
+  document.createElement("tr");
+
+sizeRow.innerHTML =
+  "<th>表示サイズ</th><td>" +
+  (
+    (item.width || item.size || 40)
+    + " × " +
+    (item.height || item.size || 40)
+  ) +
+  "</td>";
+      specs.appendChild(sizeRow);
+
+      item.specs.forEach(function(spec) {
+        const row = document.createElement("tr");
+        row.innerHTML = "<th>" + spec[0] + "</th><td>" + spec[1] + "</td>";
+        specs.appendChild(row);
+      });
+
+      document.getElementById("modalBackdrop").classList.add("open");
+    }
+
+    function closeModal() {
+      document.getElementById("modalBackdrop").classList.remove("open");
+    }
+
+    /* ============================================================
+       イベント設定
+       ============================================================ */
+    searchInput.addEventListener("input", function() {
+      renderSuggestions();
+      updateSearchMessage();
+      if (currentView === "overview") renderOverview();
+      if (currentView === "floors") renderFloors();
+      if (currentView === "floorMap") renderFloorMap();
+    });
+
+    searchInput.addEventListener("focus", renderSuggestions);
+
+    searchInput.addEventListener("keydown", function(event) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSuggestion(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSuggestion(-1);
+      } else if (event.key === "Enter" && activeSuggestionIndex >= 0) {
+        event.preventDefault();
+        const buttons = suggestions.querySelectorAll(".suggestion-button");
+        buttons[activeSuggestionIndex].dispatchEvent(
+          new MouseEvent("mousedown", { bubbles: true })
+        );
+      } else if (event.key === "Escape") {
+        closeSuggestions();
+      }
+    });
+
+    document.addEventListener("click", function(event) {
+      if (!event.target.closest(".search-wrap")) closeSuggestions();
+    });
+
+    document.getElementById("clearSearch").addEventListener("click", function() {
+      searchInput.value = "";
+      closeSuggestions();
+      searchInput.dispatchEvent(new Event("input"));
+      searchInput.focus();
+    });
+
+    backButton.addEventListener("click", function() {
+      const building = BUILDINGS.find(function(item) {
+        return item.id === selectedBuildingId;
+      });
+
+      if (currentView === "floorMap" && building.type === "building") {
+        selectedFloor = null;
+        renderFloors();
+        showView("floors");
+      } else {
+        selectedBuildingId = null;
+        selectedFloor = null;
+        renderOverview();
+        showView("overview");
+      }
+    });
+
+    document.getElementById("closeModal").addEventListener("click", closeModal);
+    document.getElementById("modalBackdrop").addEventListener("click", function(event) {
+      if (event.target.id === "modalBackdrop") closeModal();
+    });
+    document.addEventListener("keydown", function(event) {
+      if (event.key === "Escape") closeModal();
+    });
+
+    renderOverview();
+  </script>
+</body>
+</html>
