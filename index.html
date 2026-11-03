@@ -697,9 +697,6 @@
         flex-wrap: wrap;
       }
 
-      .floor-map {
-        min-height: 430px;
-      }
 
       .building-floor {
         display: none;
@@ -1725,12 +1722,27 @@ async function loadDefaultCSV() {
     ) {
       const style = getEquipmentStyle(item);
 
-      // width / heightを優先し、未設定ならsize、最後に40を使用
-      const width =
-        Number(item.width) || Number(item.size) || 40;
+      const baseWidth =
+  Number(item.width) || Number(item.size) || 40;
 
-      const height =
-        Number(item.height) || Number(item.size) || 40;
+const baseHeight =
+  Number(item.height) || Number(item.size) || 40;
+
+// PCで設備を配置したときの基準マップ幅
+const BASE_MAP_WIDTH = 1000;
+
+// 現在スマホ・PCで表示されているマップ幅
+const currentMapWidth =
+  document.getElementById("floorMap").clientWidth;
+
+// 現在の縮小率
+const scale =
+  Math.min(currentMapWidth / BASE_MAP_WIDTH, 1);
+
+// 背景と同じ比率で設備サイズを変更
+const width = baseWidth * scale;
+const height = baseHeight * scale;
+
 
       const marker = document.createElement("button");
       marker.className = "equipment-marker";
@@ -1785,11 +1797,15 @@ async function loadDefaultCSV() {
       }
 
       /* 文字数によって文字サイズを変更 */
-      name.style.fontSize = item.name.length > 7
-        ? "7px"
-        : item.name.length > 3
-          ? "10px"
-          : "20px";
+      const baseFontSize =
+  item.name.length > 7
+    ? 7
+    : item.name.length > 3
+      ? 10
+      : 20;
+
+name.style.fontSize =
+  Math.max(baseFontSize * scale, 5) + "px";
 
       /*
         チェックがONなら全名称を表示。
