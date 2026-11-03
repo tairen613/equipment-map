@@ -719,15 +719,34 @@
     </div>
 
     <div class="csv-controls">
-      <label class="csv-button" for="csvInput">CSVを読み込む</label>
-      <input id="csvInput" type="file" accept=".csv,text/csv" hidden>
-      <span id="csvStatus" class="csv-status">CSV未読込</span>
 
-      <label class="label-toggle">
-        <input id="showAllLabels" type="checkbox" checked>
-        全設備名を表示
-      </label>
-    </div>
+  <label
+      class="csv-button"
+      for="csvInput">
+      CSV読込
+  </label>
+
+  <input
+      id="csvInput"
+      type="file"
+      accept=".csv"
+      hidden>
+
+  <span
+      id="csvStatus"
+      class="csv-status">
+      未読込
+  </span>
+
+  <label class="label-toggle">
+      <input
+          id="showAllLabels"
+          type="checkbox"
+          checked>
+      全設備名を表示
+  </label>
+
+</div>
 
     <div class="search-wrap">
       <input
@@ -1176,40 +1195,143 @@
       };
     }
 
-    /** 選択されたCSVを読み込み、設備データへ反映します。 */
-    async function loadCSVFile(file) {
-      try {
-        const text = await file.text();
+/* ============================================================
+   ローカル・OneDrive用 CSV手動読み込み
+   ============================================================ */
 
-        const rows = parseCSV(text)
-          .map(normalizeRow)
-          .filter(item => {
-            return item.id && item.name && item.buildingId;
-          });
+/**
+ * CSV読込ボタンで選択されたCSVを読み込みます*
+ */
+async function loadCSVFile(file) {
+  try {
+    csvStatus.textContent = "CSV読込中...";
 
-        if (!rows.length) {
-          throw new Error("有効な設備行がありません");
-        }
+    const text = await file.text();
 
-        EQUIPMENT = rows;
-        csvStatus.textContent = `${file.name}：${rows.length}件読込`;
-        renderCurrentView();
-      } catch (error) {
-        csvStatus.textContent = `読込失敗：${error.message}`;
-        console.error(error);
-      }
+    const rows = parseCSV(text)
+      .map(normalizeRow)
+      .filter(item => {
+        return (
+          item.id &&
+          item.name &&
+          item.buildingId
+        );
+      });
+
+    if (rows.length === 0) {
+      throw new Error(
+        "有効な設備データがありません"
+      );
     }
 
-    /* CSVファイルが選択されたとき */
-    document
-      .getElementById("csvInput")
-      .addEventListener("change", event => {
-        const file = event.target.files[0];
+    // 読み込んだ設備を保存
+    EQUIPMENT = rows;
 
-        if (file) {
-          loadCSVFile(file);
-        }
-      });
+    // 読込結果をヘッダーへ表示
+    csvStatus.textContent =
+      file.name + "：" + rows.length + "件読込";
+
+    // 現在表示中の画面を再描画
+    renderCurrentView();
+
+  } catch (error) {
+    csvStatus.textContent =
+      "CSV読込失敗：" + error.message;
+
+    console.error(
+      "選択したCSVの読込に失敗しました。",
+      error
+    );
+  }
+}
+
+/* ============================================================
+   GitHub上の equipment.csv を自動読み込み
+   ============================================================ */
+
+/**
+ * GitHub Pages上に置かれた equipment.csv を読み込みます。
+ *
+ * index.html と equipment.csv は、
+ * GitHubリポジトリの同じ階層へ配置してください。
+ */
+async function loadDefaultCSV() {
+
+  try {
+
+    /* キャッシュ対策として時刻を付ける */
+    const csvUrl =
+      "./equipment.csv?v=" + Date.now();
+
+    const response =
+      await fetch(csvUrl);
+
+    if (!response.ok) {
+
+      throw new Error(
+        "equipment.csv が見つかりません。HTTP " +
+        response.status
+      );
+
+    }
+
+    const text =
+      await response.text();
+
+    const rows =
+      parseCSV(text)
+        .map(normalizeRow)
+        .filter(item => {
+
+          return (
+            item.id &&
+            item.name &&
+            item.buildingId
+          );
+
+        });
+
+    if (rows.length === 0) {
+
+      throw new Error(
+        "equipment.csv に有効な設備データがありません"
+      );
+
+    }
+
+    EQUIPMENT = rows;
+
+    csvStatus.textContent =
+      "equipment.csv：" +
+      rows.length +
+      "件読込";
+
+    /*
+      CSV読込完了後に現在の画面を再描画
+    */
+    renderCurrentView();
+
+  } catch (error) {
+
+    csvStatus.textContent =
+      "equipment.csv 読込失敗：" +
+      error.message;
+
+    console.error(
+      "equipment.csv の読込に失敗しました。",
+      error
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   全設備名表示の切り替え
+   ============================================================ */
+
+
 
     /* 全設備名表示の切り替え */
     showAllLabels.addEventListener("change", () => {
@@ -1913,6 +2035,40 @@
        16. イベント設定
        ============================================================ */
 
+    /* ============================================================
+   CSVファイル選択イベント
+   ============================================================ */
+
+const csvInput =
+  document.getElementById("csvInput");
+
+if (csvInput) {
+
+  csvInput.addEventListener(
+    "change",
+    async event => {
+
+      const file = event.target.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      /*
+        同じCSVを続けて選択した場合にも
+        changeイベントを発生させるため、
+        読込後にinputの値を空にします。
+      */
+      await loadCSVFile(file);
+
+      event.target.value = "";
+
+    }
+  );
+
+}
+
+
     searchInput.addEventListener("input", () => {
       renderSuggestions();
       renderCurrentView();
@@ -1997,10 +2153,35 @@
       }
     });
 
-    /* ============================================================
-       17. 初期表示
-       ============================================================ */
-    renderOverview();
+  /* ============================================================
+   17. 初期表示
+   ============================================================ */
+
+/* 最初に建屋を表示 */
+renderOverview();
+
+/*
+  GitHub Pagesなど、http または https で
+  開いた場合だけCSVを自動読み込みします。
+*/
+if (
+  location.protocol === "https:" ||
+  location.protocol === "http:"
+) {
+
+  loadDefaultCSV();
+
+} else {
+
+  /*
+    OneDrive同期フォルダやPC上から
+    ダブルクリックで開いた場合。
+  */
+  csvStatus.textContent =
+    "ローカルモード：CSV読込ボタンから選択";
+
+}
+
   </script>
 </body>
 </html>
