@@ -367,29 +367,33 @@
 }
 
 /* マップ全体 */
-.floor-map {
+/* =========================================
+   マップ表示領域
+   ========================================= */
 
+.floor-map-viewport {
   position: relative;
-
   width: 100%;
-
-  border: 2px solid #cbd5e1;
-
-  background: #f8fafc;
-
-  overflow: visible;
-
+  overflow: hidden;
 }
 
-/* 階画像 */
+/*
+  PCで設備位置を作成した基準マップ。
+  背景画像・設備・文字を全部この中に配置する。
+*/
+.floor-map {
+  position: relative;
+  width: 1000px;
+  transform-origin: left top;
+  border: 2px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+/* 背景画像 */
 .floor-image {
-
   display: block;
-
-  width: 100%;
-
+  width: 1000px;
   height: auto;
-
 }
 
 
@@ -804,14 +808,14 @@
       </div>
 
       <div class="card-body floor-layout">
-        <div id="floorMap" class="floor-map">
-
+        <div id="floorMapViewport" class="floor-map-viewport">
+  <div id="floorMap" class="floor-map">
     <img
-        id="floorImage"
-        class="floor-image"
-        alt="階マップ"
+      id="floorImage"
+      class="floor-image"
+      alt="階マップ"
     >
-
+  </div>
 </div>
 
         <aside class="equipment-list">
@@ -1722,26 +1726,11 @@ async function loadDefaultCSV() {
     ) {
       const style = getEquipmentStyle(item);
 
-      const baseWidth =
+      const width =
   Number(item.width) || Number(item.size) || 40;
 
-const baseHeight =
+const height =
   Number(item.height) || Number(item.size) || 40;
-
-// PCで設備を配置したときの基準マップ幅
-const BASE_MAP_WIDTH = 1000;
-
-// 現在スマホ・PCで表示されているマップ幅
-const currentMapWidth =
-  document.getElementById("floorMap").clientWidth;
-
-// 現在の縮小率
-const scale =
-  Math.min(currentMapWidth / BASE_MAP_WIDTH, 1);
-
-// 背景と同じ比率で設備サイズを変更
-const width = baseWidth * scale;
-const height = baseHeight * scale;
 
 
       const marker = document.createElement("button");
@@ -1797,15 +1786,13 @@ const height = baseHeight * scale;
       }
 
       /* 文字数によって文字サイズを変更 */
-      const baseFontSize =
+      name.style.fontSize =
   item.name.length > 7
-    ? 7
+    ? "7px"
     : item.name.length > 3
-      ? 10
-      : 20;
+      ? "10px"
+      : "20px";
 
-name.style.fontSize =
-  Math.max(baseFontSize * scale, 5) + "px";
 
       /*
         チェックがONなら全名称を表示。
@@ -1856,6 +1843,61 @@ name.style.fontSize =
       return button;
     }
 
+
+
+/* ============================================================
+   マップ全体を画面幅に合わせて同比率縮小
+   ============================================================ */
+
+function resizeFloorMap() {
+
+  const BASE_MAP_WIDTH = 1000;
+
+  const viewport =
+    document.getElementById("floorMapViewport");
+
+  const map =
+    document.getElementById("floorMap");
+
+  const image =
+    document.getElementById("floorImage");
+
+  if (!viewport || !map || !image) {
+    return;
+  }
+
+  /* 表示可能な横幅 */
+  const availableWidth =
+    viewport.clientWidth;
+
+  /* PCでは100%、スマホでは必要な分だけ縮小 */
+  const scale =
+    Math.min(
+      availableWidth / BASE_MAP_WIDTH,
+      1
+    );
+
+  /*
+    背景画像・設備・設備名をまとめて縮小
+  */
+  map.style.transform =
+    `scale(${scale})`;
+
+  /*
+    transformでは外側の高さが自動では縮まらないため、
+    実際の表示高さにviewportを合わせる
+  */
+  const baseHeight =
+    image.offsetHeight;
+
+  viewport.style.height =
+    (baseHeight * scale) + "px";
+}
+
+
+
+
+
     /* ============================================================
        14. 階マップ描画
        ============================================================ */
@@ -1901,30 +1943,32 @@ name.style.fontSize =
     const image =
         MAP_IMAGES[imageKey];
 
-    /* 階画像表示 */
-    if (image) {
+   /* 階画像表示 */
+if (image) {
 
-        floorImage.src = image;
+    floorImage.onload = () => {
+        resizeFloorMap();
+    };
 
-        floorImage.style.display =
-            "block";
+    floorImage.src = image;
+    floorImage.style.display = "block";
 
-    } else {
+} else {
 
-        floorImage.style.display =
-            "none";
+    floorImage.style.display = "none";
 
-        const label =
-            document.createElement("div");
+    const label =
+        document.createElement("div");
 
-        label.className =
-            "placeholder-label";
+    label.className =
+        "placeholder-label";
 
-        label.textContent =
-            "MAP_IMAGESへ画像を登録してください";
+    label.textContent =
+        "MAP_IMAGESへ画像を登録してください";
 
-        map.appendChild(label);
-    }
+    map.appendChild(label);
+}
+
 
     const floorValue =
         building.type === "area"
@@ -2197,6 +2241,14 @@ if (
     "ローカルモード：CSV読込ボタンから選択";
 
 }
+
+window.addEventListener(
+  "resize",
+  () => {
+    resizeFloorMap();
+  }
+);
+
 
   </script>
 </body>
