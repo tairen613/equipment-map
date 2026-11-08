@@ -1,0 +1,10 @@
+﻿id,name,type,x,y,width,height
+new-1-t,新1号T,building,70.5,46.5,17,15
+new-2-t,新2号T,building,52,46.5,18.5,15
+unit-1-b,1号B,building,70.5,26.5,15,20
+unit-2-b,2号B,building,52,26.5,18.5,20
+coal-silo,石炭サイロ,area,8,10,15,14
+light-oil-tank,軽油タンク,area,8,30,15,12
+ammonia-storage,アンモニア貯蔵,area,8,48,15,12
+idf,IDF,area,30,28,10,12
+ep,電気集塵装置,area,30,44,14,15

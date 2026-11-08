@@ -862,107 +862,10 @@
     /* ============================================================
        1. 建屋・設備エリア設定
        ============================================================ */
-    const BUILDINGS = [
-      {
-        id: "new-1-t",
-        name: "新1号T",
-        type: "building",
-        floorList: [
-          "RF", "9F", "8F", "7F", "5F", "4F",
-          "3F", "2F", "1F", "B1F", "B2F"
-        ],
-        x: 70.5,
-        y: 46.5,
-        width: 17,
-        height: 15
-      },
-      {
-        id: "new-2-t",
-        name: "新2号T",
-        type: "building",
-        floorList: [
-          "RF", "9F", "8F", "7F", "5F", "4F",
-          "3F", "2F", "1F", "B1F", "B2F"
-        ],
-        x: 52,
-        y: 46.5,
-        width: 18.5,
-        height: 15
-      },
-      {
-        id: "unit-1-b",
-        name: "1号B",
-        type: "building",
-        floorList: [
-          "RF", "15F", "14F", "13F", "12F", "11F",
-          "10F", "9F", "8F", "7F", "6F", "5F",
-          "4F", "3F", "2F", "1F"
-        ],
-        x: 70.5,
-        y: 26.5,
-        width: 15,
-        height: 20
-      },
-      {
-        id: "unit-2-b",
-        name: "2号B",
-        type: "building",
-        floorList: [
-          "RF", "17F", "16F", "15F", "14F", "13F",
-          "12F", "11F", "10F", "9F", "8F", "7F",
-          "6F", "5F", "4F", "3F", "2F", "1F"
-        ],
-        x: 52,
-        y: 26.5,
-        width: 18.5,
-        height: 20
-      },
-      {
-        id: "coal-silo",
-        name: "石炭サイロ",
-        type: "area",
-        x: 8,
-        y: 10,
-        width: 15,
-        height: 14
-      },
-      {
-        id: "light-oil-tank",
-        name: "軽油タンク",
-        type: "area",
-        x: 8,
-        y: 30,
-        width: 15,
-        height: 12
-      },
-      {
-        id: "ammonia-storage",
-        name: "アンモニア貯蔵",
-        type: "area",
-        x: 8,
-        y: 48,
-        width: 15,
-        height: 12
-      },
-      {
-        id: "idf",
-        name: "IDF",
-        type: "area",
-        x: 30,
-        y: 28,
-        width: 10,
-        height: 12
-      },
-      {
-        id: "ep",
-        name: "電気集塵装置",
-        type: "area",
-        x: 30,
-        y: 44,
-        width: 14,
-        height: 15
-      }
-    ];
+    
+let BUILDINGS = [];
+let FLOORS = [];
+
 
     /* ============================================================
        2. 設備種類ごとの表示スタイル
@@ -1030,18 +933,7 @@
       }
     };
 
-    /* ============================================================
-       3. 建屋・階別のマップ画像
-
-       書式：
-       "建屋ID-階": "画像ファイルのパス"
-       ============================================================ */
-    const MAP_IMAGES = {
-      "new-1-t-1F": "maps/1T_1F.png",
-      "new-2-t-1F": "maps/2T_1F.jpg",
-      "unit-1-b-1F": "maps/1B_1F.jpg"
-    };
-
+    /* ===========================================================
     /* ============================================================
        4. 状態管理
        ============================================================ */
@@ -1196,6 +1088,40 @@
       };
     }
 
+     /* ============================================================
+   建屋CSV変換
+   ============================================================ */
+
+function normalizeBuildingRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type || "building",
+    x: toNumber(row.x, 0),
+    y: toNumber(row.y, 0),
+    width: toNumber(row.width, 10),
+    height: toNumber(row.height, 10)
+  };
+}
+
+
+/* ============================================================
+   階CSV変換
+   ============================================================ */
+
+function normalizeFloorRow(row) {
+  return {
+    buildingId: row.buildingId,
+    floor: row.floor,
+    name: row.name || "",
+    image: row.image || ""
+  };
+}
+
+
+
+
+
 /* ============================================================
    ローカル・OneDrive用 CSV手動読み込み
    ============================================================ */
@@ -1256,76 +1182,159 @@ async function loadCSVFile(file) {
  * index.html と equipment.csv は、
  * GitHubリポジトリの同じ階層へ配置してください。
  */
+
+/* ============================================================
+   GitHub Pages用
+   3つのCSVを自動読み込み
+   ============================================================ */
+
 async function loadDefaultCSV() {
 
   try {
 
-    /* キャッシュ対策として時刻を付ける */
-    const csvUrl =
-      "./equipment.csv?v=" + Date.now();
+    csvStatus.textContent =
+      "CSVデータ読込中...";
 
-    const response =
-      await fetch(csvUrl);
+    const cache = "?v=" + Date.now();
 
-    if (!response.ok) {
+    /* 3ファイルを同時に取得 */
+    const [
+      buildingsResponse,
+      floorsResponse,
+      equipmentResponse
+    ] = await Promise.all([
+      fetch("./buildings.csv" + cache),
+      fetch("./floors.csv" + cache),
+      fetch("./equipment.csv" + cache)
+    ]);
 
+
+    /* =========================
+       ファイル存在確認
+       ========================= */
+
+    if (!buildingsResponse.ok) {
       throw new Error(
-        "equipment.csv が見つかりません。HTTP " +
-        response.status
+        "buildings.csv が見つかりません"
       );
-
     }
 
-    const text =
-      await response.text();
-
-    const rows =
-      parseCSV(text)
-        .map(normalizeRow)
-        .filter(item => {
-
-          return (
-            item.id &&
-            item.name &&
-            item.buildingId
-          );
-
-        });
-
-    if (rows.length === 0) {
-
+    if (!floorsResponse.ok) {
       throw new Error(
-        "equipment.csv に有効な設備データがありません"
+        "floors.csv が見つかりません"
       );
-
     }
 
-    EQUIPMENT = rows;
+    if (!equipmentResponse.ok) {
+      throw new Error(
+        "equipment.csv が見つかりません"
+      );
+    }
+
+
+    /* =========================
+       CSVを文字列として取得
+       ========================= */
+
+    const [
+      buildingsText,
+      floorsText,
+      equipmentText
+    ] = await Promise.all([
+      buildingsResponse.text(),
+      floorsResponse.text(),
+      equipmentResponse.text()
+    ]);
+
+
+    /* =========================
+       建屋
+       ========================= */
+
+    BUILDINGS = parseCSV(buildingsText)
+      .map(normalizeBuildingRow)
+      .filter(item => {
+        return item.id && item.name;
+      });
+
+
+    /* =========================
+       階
+       ========================= */
+
+    FLOORS = parseCSV(floorsText)
+      .map(normalizeFloorRow)
+      .filter(item => {
+        return (
+          item.buildingId &&
+          item.floor
+        );
+      });
+
+
+    /* =========================
+       設備
+       ========================= */
+
+    EQUIPMENT = parseCSV(equipmentText)
+      .map(normalizeRow)
+      .filter(item => {
+        return (
+          item.id &&
+          item.name &&
+          item.buildingId
+        );
+      });
+
+
+    /* =========================
+       有効データ確認
+       ========================= */
+
+    if (!BUILDINGS.length) {
+      throw new Error(
+        "buildings.csv に有効な建屋がありません"
+      );
+    }
+
+    if (!FLOORS.length) {
+      throw new Error(
+        "floors.csv に有効な階データがありません"
+      );
+    }
+
+
+    /* =========================
+       読込完了
+       ========================= */
 
     csvStatus.textContent =
-      "equipment.csv：" +
-      rows.length +
-      "件読込";
+      "建屋 " +
+      BUILDINGS.length +
+      "件 / 階 " +
+      FLOORS.length +
+      "件 / 設備 " +
+      EQUIPMENT.length +
+      "件";
 
-    /*
-      CSV読込完了後に現在の画面を再描画
-    */
+
     renderCurrentView();
+
 
   } catch (error) {
 
     csvStatus.textContent =
-      "equipment.csv 読込失敗：" +
+      "CSV読込失敗：" +
       error.message;
 
     console.error(
-      "equipment.csv の読込に失敗しました。",
+      "CSVデータの読込に失敗しました。",
       error
     );
 
   }
-
 }
+
 
 
 /* ============================================================
@@ -1584,11 +1593,23 @@ async function loadDefaultCSV() {
           height: building.height + "%"
         });
 
-        const subText = building.type === "area"
-          ? "タップして表示"
-          : building.floorList[0] +
-            " ～ " +
-            building.floorList.at(-1);
+        const buildingFloors =
+  FLOORS
+    .filter(item => {
+      return item.buildingId === building.id;
+    })
+    .map(item => item.floor);
+
+const subText =
+  building.type === "area"
+    ? "タップして表示"
+    : buildingFloors.length
+      ? buildingFloors[0] +
+        " ～ " +
+        buildingFloors.at(-1)
+      : "階情報なし";
+
+
 
         button.innerHTML =
           '<span class="building-name">' + building.name + '</span>' +
@@ -1644,7 +1665,15 @@ async function loadDefaultCSV() {
 
       grid.innerHTML = "";
 
-      building.floorList.forEach(floor => {
+      const buildingFloors =
+  FLOORS.filter(item => {
+    return item.buildingId === building.id;
+  });
+
+buildingFloors.forEach(floorData => {
+
+  const floor = floorData.floor;
+
         const button = document.createElement("button");
 
         const equipmentCount = EQUIPMENT.filter(item => {
@@ -1935,13 +1964,22 @@ function resizeFloorMap() {
     map.querySelectorAll(".placeholder-label")
        .forEach(label => label.remove());
 
-    const imageKey =
-        building.type === "area"
-            ? building.id
-            : building.id + "-" + selectedFloor;
+    const floorData =
+  FLOORS.find(item => {
 
-    const image =
-        MAP_IMAGES[imageKey];
+    return (
+      item.buildingId === building.id &&
+      item.floor === selectedFloor
+    );
+
+  });
+
+const image =
+  floorData
+    ? floorData.image
+    : "";
+
+
 
    /* 階画像表示 */
 if (image) {
@@ -1964,7 +2002,7 @@ if (image) {
         "placeholder-label";
 
     label.textContent =
-        "MAP_IMAGESへ画像を登録してください";
+  "floors.csv の image に画像を登録してください";
 
     map.appendChild(label);
 }
